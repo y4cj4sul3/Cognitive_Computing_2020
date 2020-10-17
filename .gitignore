@@ -1,0 +1,14 @@
+# Large files
+**/*.pdf
+**/*.zip
+**/*.png
+**/*.jpg
+**/*.npy
+**/*.ttf
+
+# Cache files
+**/.ipynb_checkpoints
+
+# Mac
+**/.DS_Store
+
