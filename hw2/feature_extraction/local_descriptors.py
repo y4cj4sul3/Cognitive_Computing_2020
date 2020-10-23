@@ -4,44 +4,24 @@ import numpy as np
 from sklearn.cluster import KMeans
 
 import os
+import glob
 import pickle
 
 
 def localDescriptor(img, detector, g=1):
     kps, dess = detector.detectAndCompute(img, None)
-
+    
     if g == 1:
         return np.array(dess)
     else:
         height, width = img.shape[:2]
-        gz_x, gz_y = height // g, width // g
+        gz_x, gz_y = width / g, height / g
 
         grids = [[] for i in range(g**2)]
         for kp, des in zip(kps, dess):
-            i = kp.pt[0] // gz_x
-            j = kp.pt[1] // gz_y
-            grids[g*i + j].appned(des)
+            grids[int(g*(kp.pt[0] // gz_x) + kp.pt[1] // gz_y)].append(des)
 
         return np.array(grids)
-
-
-# def SIFT(img):
-#     # make sure the version of opencv-python >= 4.4.0
-#     sift = cv2.SIFT_create()
-#     kps, des = sift.detectAndCompute(img, None)
-#     # convert to normal list
-#     kps = [kp.pt for kp in kps]
-
-#     return np.array([kps, des])
-
-
-# def ORB(img):
-#     orb = cv2.ORB_create()
-#     kps, des = orb.detectAndCompute(img, None)
-#     # convert to normal list
-#     kps = [kp.pt for kp in kps]
-
-#     return np.array([kps, des])
 
 
 def genCodeBook(folder, k, det='SIFT'):
@@ -67,17 +47,21 @@ def genCodeBook(folder, k, det='SIFT'):
 
         # load images
         descriptor = []
-        for filename in glob.glob(os.path.join(folder, '/*/*.jpg')):
+        for filename in glob.glob(os.path.join(folder, '*/*.jpg')):
             img = cv2.imread(filename)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             # detect feature
-            _, des = detector.detectAndCompute(img, None)
-            descriptor.append(des)
+            kp, des = detector.detectAndCompute(img, None)
+            
+            if len(kp) > 0:
+                descriptor.append(des)
 
         # flatten
         flat_des = list(itertools.chain.from_iterable(descriptor))
         # save local descriptor
         np.save(des_filepath, flat_des)
+        
+    # print(np.shape(flat_des))
 
     # k-means for code book
     codebook = KMeans(n_clusters=k, verbose=1).fit(flat_des)
@@ -125,79 +109,106 @@ def VLAD(name, des, k, codebook, grids=1, path='features/', overwrite=False):
 
     '''
     # load from files
-    filepath = os.path.join(path, name + '.npy')
-    if not overwrite and os.path.isfile(filepath):
-        print('load from file')
-        return np.load(filepath, allow_pickle=True)
+    vlad_filepath = os.path.join(path, 'vlad_' + name + '.npy')
+    hist_filepath = os.path.join(path, 'hist_' + name + '.npy')
+    if not overwrite and os.path.isfile(vlad_filepath) and os.path.isfile(hist_filepath):
+        print('load pre-computed features from file')
+        return np.load(vlad_filepath, allow_pickle=True), np.load(hist_filepath, allow_pickle=True)
 
-    # load code book
-    # vw_filepath = os.path.join(path, name + '_vw.pickle')
-    # if not overwrite and os.path.isfile(vw_filepath):
-    #     print('load VM from file')
-    #     with open(vw_filepath, 'rb') as fp:
-    #         VWs = pickle.load(fp)
-    # else:
-    #     # flatten descriptors ( -> (# images x # keypoints) x d components)
-    #     flat_des = list(itertools.chain.from_iterable(des))
-    #     # k-means for visual words
-    #     VWs = KMeans(n_clusters=k, verbose=1).fit(flat_des)
-    #     # save VWs
-    #     with open(vw_filepath, 'wb') as fp:
-    #         pickle.dump(VWs, fp)
 
+#     if grids == 1:
+#         des = np.reshape(des.shape[0])
+    
+#     des = np.array(des)
+    
     # parameters
-    d = des[0].shape[1]  # d-dimension
     # centroids
     c = codebook.cluster_centers_
+    # d-dimension
+#     print(np.shape(des))
+#     print(np.shape(des[0][0]))
+    d = 0
+    for i in range(len(des)):
+        for j in range(len(des[i])):
+            if len(des[i][j]) > 0:
+                d = np.shape(des[i][j])[-1]
+                break
+        if d > 0:
+            break
+    print(d)
+    
+#     if grids == 1:
+#         VLADs = []
+#         # for each image
+#         for X in des:
+#             # X (# keypoints x d components)
+#             # get NN(X)
+#             nn_x = codebook.predict(X.tolist())
 
-    if grids == 1:
-        VLADs = []
-        # for each image
-        for X in des:
+#             # compute VLAD descriptors (D = k x d)
+#             V = np.zeros((k, d))
+#             for i in range(k):
+#                 if np.sum(nn_x == i) > 0:
+#                     # sum of difference
+#                     V[i] = np.sum(X[nn_x == i, :] - c[i], axis=0)
+
+#             # PCA & ADC
+
+#             # L2 normalization
+#             V = V / np.linalg.norm(V, ord=2)
+
+#             VLADs.append(V)
+#     else:
+    VLADs = []
+    hists = []
+    # for each image
+    for X_g in des:
+        if grids == 1:
+            X_g = np.array([X_g])
+            
+        V_g = []
+        H_g = []
+        for X in X_g:
             # X (# keypoints x d components)
-            # get NN(X)
-            nn_x = codebook.predict(X.tolist())
-
-            # compute VLAD descriptors (D = k x d)
+            # V (k class x d components)
+            X = np.array(X)
             V = np.zeros((k, d))
-            for i in range(k):
-                if np.sum(nn_x == i) > 0:
-                    # sum of difference
-                    V[i] = np.sum(X[nn_x == i, :] - c[i], axis=0)
-
-            # PCA & ADC
-
-            # L2 normalization
-            V = V / np.linalg.norm(V, ord=2)
-
-            VLADs.append(V)
-    else:
-        VLADs = []
-        # for each image
-        for X_g in des:
-            V_g = []
-            for X in X_g:
-                # X (# keypoints x d components)
+            H = np.zeros(k)
+            
+            if len(X) > 0:
                 # get NN(X)
-                nn_x = codebook.predict(X.tolist())
+                nn_x = codebook.predict(X)
 
                 # compute VLAD descriptors (D = k x d)
-                V = np.zeros((k, d))
+
                 for i in range(k):
                     if np.sum(nn_x == i) > 0:
                         # sum of difference
                         V[i] = np.sum(X[nn_x == i, :] - c[i], axis=0)
+                        
+                    # histogram
+                    H[i] = np.sum(nn_x == i)
 
-                # PCA & ADC
+                # PCA & ADC (not implemented)
 
                 # L2 normalization
                 V = V / np.linalg.norm(V, ord=2)
-                V_g.append(V)
+                # normalization
+                H = H / len(X)
+                
+            V_g.append(V)
+            H_g.append(H)
 
-            VLADs.append(V_g)
+        # flatten
+        V_g = np.array(V_g)
+        VLADs.append(V_g.flatten())
+        H_g = np.array(H_g)
+        hists.append(H_g.flatten())
 
     # save features into file
     VLADs = np.array(VLADs)
-    np.save(filepath, VLADs)
+    np.save(vlad_filepath, VLADs)
+    hists = np.array(hists)
+    np.save(hist_filepath, hists)
 
-    return VLADs
+    return VLADs, hists
