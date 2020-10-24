@@ -120,12 +120,12 @@ def genLD(cs, grids, det='SIFT', ow=False):
 # VLAD
 def genVLAD(k, des, des_name, codebook, grids, ow=False):
     # parameters
-    name = 'vlad_k{}_{}'.format(k, des_name)
+    name = 'k{}_{}'.format(k, des_name)
 
     # compute VLAD descriptor
-    feature = VLAD(name, des, k, codebook, grids, overwrite=ow)
+    feature_vlad, feature_hist = VLAD(name, des, k, codebook, grids, overwrite=ow)
     # (grids)^2 * k class * d components 
-    return name, feature
+    return 'vlad_'+name, feature_vlad, 'hist_'+name, feature_hist
 
 # # Pre-generate -- Color Histogram
 # for cs, n_bin in zip(['RGB', 'HSV'], [[4, 4, 4], [18, 3, 3]]):
@@ -349,16 +349,43 @@ results = {}
 
 #         results[name_ld] = {'MMAP': MMAP, 'MAP': MAP, 'P': P, 'R': R}
 
-# Gabor Texture
-for cs in ['GRAY', 'RGB', 'HSV']:
-    for K, S in [[6, 8], [8, 6], [12, 8]]:
-        for grids in range(1, 10):
-            # generate (or load) features
-            name_gabor, feature_gabor = genGabor(cs, grids, K, S)
-            print(name_gabor, feature_gabor.shape)
+# # Gabor Texture
+# for cs in ['GRAY', 'RGB', 'HSV']:
+#     for K, S in [[6, 8], [8, 6], [12, 8]]:
+#         for grids in range(1, 10):
+#             # generate (or load) features
+#             name_gabor, feature_gabor = genGabor(cs, grids, K, S)
+#             print(name_gabor, feature_gabor.shape)
 
-            # evaluation (or load result)
-            for order in [1, 2]:
-                weight = 1/np.std(feature_gabor, axis=0)
-                name, result = evalLn(name_gabor, feature_gabor, ord=order, weight=weight)
-                results[name] = result
+#             # evaluation (or load result)
+#             for order in [1, 2]:
+#                 weight = 1/np.std(feature_gabor, axis=0)
+#                 name, result = evalLn(name_gabor, feature_gabor, ord=order, weight=weight)
+#                 results[name] = result
+                
+# VLAD & Histogram of Visual Word
+for db_folder in ['101_ObjectCategories', 'data']:
+    for detector in ['SIFT', 'ORB']:
+        for k in [16, 32, 64, 128]:
+            # generate (or load) codebook
+            codebook = genCodeBook(db_folder, k, detector)
+            
+            for grids in [1, 2, 4, 8]:
+                # generate (or load) local descriptor
+                name_ld, feature_ld = genLD(cs='RGB', grids=grids, det=detector)
+
+                # generate (or load) features
+                name_vlad, feature_vlad, name_hist, feature_hist = genVLAD(k, feature_ld, name_ld, codebook, grids)
+                print(name_vlad, feature_vlad.shape)
+                print(name_hist, feature_hist.shape)
+                
+                # evaluation (or load result)
+                for order in [1, 2]:
+                    print(name_vlad, feature_vlad.shape)
+                    print(name_hist, feature_hist.shape)
+                    # vlad
+                    name, result = evalLn(name_vlad, feature_vlad, ord=order)
+                    results[name] = result
+                    # hist
+                    name, result = evalLn(name_hist, feature_hist, ord=order)
+                    results[name] = result
