@@ -6,6 +6,8 @@
 **/*.npy
 **/*.pickle
 **/*.ttf
+**/*.pkl
+**/*.gcode
 
 # Cache files
 **/.ipynb_checkpoints
@@ -14,3 +16,8 @@
 # Mac
 **/.DS_Store
 
+# VS Code
+.vscode
+
+# Config files
+**/*.ini
