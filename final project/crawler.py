@@ -5,16 +5,43 @@ import shutil
 import time
 from datetime import datetime
 
+import argparse
+
 from UltimakerPrinter import Printer
 
-printerName = 'S5'
+# parse argument
+parser = argparse.ArgumentParser()
+parser.add_argument('--printer', '-p', type=str, required=True, help='Printer name')
+args = parser.parse_args()
+
+# printer (specified in ultimaker.ini)
+printerName = args.printer
 printer = Printer(printerName)
 
 while True:
     # check printer state every minute
     print('wait for printing...')
-    while printer.getPrintJobState() != 'printing':
-        time.sleep(60)
+    printerStatus = ''
+    printJobState = ''
+    waitTime = 60
+    while True:
+        # check printer status
+        if printer.getPrinterState() == 'printing':
+            printerStatus = 'printing'
+            # check print job state
+            if printJobState != printer.getPrintJobState():
+                printJobState = printer.getPrintJobState()
+                print(printerStatus, printJobState)
+                if printJobState == 'printing':
+                    break
+            waitTime = 1
+        else:
+            if printerStatus != printer.getPrinterState():
+                printerStatus = printer.getPrinterState()
+                print(printerStatus)
+            waitTime = 60
+
+        time.sleep(waitTime)
 
     print("start printing!")
 
@@ -22,10 +49,10 @@ while True:
     printJob = printer.getPrintJob()
     date = datetime.now().strftime('%Y%m%d%H%M%S')
     folderPath = 'data/UM{}/{}_{}/'.format(printerName, printJob['name'], date)
-    os.makedirs(folderPath)
+    os.makedirs(folderPath + 'images/')
     print(folderPath)
     with open(folderPath + 'printJob_start.pkl', 'wb') as fp:
-        pickle.dump(printJob, fp, )
+        pickle.dump(printJob, fp)
 
     # get gcode
     gcode = printer.getPrintJobGcode()
@@ -43,7 +70,7 @@ while True:
         # get snaphot
         img = printer.getCameraSnapshot()
         if img is not None and progress[-1] is not None:
-            with open(folderPath + str(timestamp[-1]) + '.png', 'wb') as fp:
+            with open(folderPath + 'images/' + str(timestamp[-1]) + '.png', 'wb') as fp:
                 shutil.copyfileobj(img, fp)
                 
         if progress[-1] == 1:
@@ -61,6 +88,10 @@ while True:
     printJob = printer.getPrintJob()
     with open(folderPath + 'printJob_finish.pkl', 'wb') as fp:
         pickle.dump(printJob, fp)
+
+    # wait for state change
+    while printer.getPrintJobState() == 'printing':
+        time.sleep(10)
 
     print('print finished !')
 

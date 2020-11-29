@@ -107,13 +107,23 @@ class Printer:
 
     # Camera
     def getCameraSnapshot(self, index=0):
-        r = self.getRequest('camera/{}/snapshot'.format(index), stream=True)
+        # old fashion: suitable for all printer
+        r = self.session.get('http://{}:{}/?action=snapshot'.format(self.printerIP, 8080+index), stream=True)
+        # API: not suitable for 3, 3E
+        # r = self.getRequest('camera/{}/snapshot'.format(index), stream=True)
         if r.status_code != 200:
             print(r.text)
             return None
         else:
             return r.raw
 
+    def getCameraSnapshotOld(self, index=0):
+        r = self.session.get('http://{}:{}/?action=snapshot'.format(self.printerIP, 8080+index), stream=True)
+        if r.status_code != 200:
+            print(r.text)
+            return None
+        else:
+            return r.raw
         
     # HTTP Requests
     def getRequest(self, method, **kargs):
@@ -126,10 +136,19 @@ class Printer:
 
 
 if __name__ == '__main__':
+    
+    import shutil
 
-    printer = Printer('S5')
+    printer = Printer('3Ex')
 
     print(printer.getPrintJobState())
 
     printer.setPrinterLED([0, 0, 100])
     print(printer.getPrintJobProgress())
+
+    img = printer.getCameraSnapshotOld()
+    if img is None:
+        print('oh no')
+    
+    with open('data/image.png', 'wb') as fp:
+        shutil.copyfileobj(img, fp)
